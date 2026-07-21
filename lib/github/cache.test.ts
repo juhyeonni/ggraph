@@ -121,4 +121,16 @@ describe("setCacheEntry", () => {
     state.throwOnSet = 99;
     await expect(setCacheEntry("o", "r", "main", [])).resolves.toBeUndefined();
   });
+
+  it("stores an optional etag on the entry when provided", async () => {
+    await setCacheEntry("o", "r", "main", [], "abc123");
+    const stored = state.store.get(keyFor("main")) as CacheEntry;
+    expect(stored.etag).toBe("abc123");
+  });
+
+  it("leaves etag undefined when not provided", async () => {
+    await setCacheEntry("o", "r", "main", []);
+    const stored = state.store.get(keyFor("main")) as CacheEntry;
+    expect(stored.etag).toBeUndefined();
+  });
 });

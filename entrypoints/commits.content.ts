@@ -1,6 +1,7 @@
 import { drawGraph, laneX, railWidth } from "../lib/draw/draw";
 import { type HitNode, hitTest } from "../lib/draw/hit-test";
 import { getCacheEntry, isFresh, setCacheEntry } from "../lib/github/cache";
+import { decideDegrade } from "../lib/github/degrade";
 import { type Commit, type FetchCommitsError, fetchCommits } from "../lib/github/fetch-commits";
 import {
   type CommitsPath,
@@ -9,11 +10,12 @@ import {
   getRowSha,
   parseCommitsPath,
 } from "../lib/github/selectors";
+import { getSettings } from "../lib/github/settings-store";
+import { clearToken, getToken } from "../lib/github/token-store";
 import { computeLayout } from "../lib/layout/compute-layout";
 import { log } from "../lib/log";
 import { removeNotice, showNotice } from "../lib/ui/notice";
 import { hideTooltip, removeTooltip, showTooltip } from "../lib/ui/tooltip";
-import { formatResetIn } from "../lib/util/relative-time";
 
 const RAIL_ID = "ggraph-rail";
 const MIN_VIEWPORT_WIDTH = 768;
@@ -191,15 +193,17 @@ export default defineContentScript({
       };
     };
 
-    const degrade = (error: FetchCommitsError, rowEls: HTMLElement[]): void => {
-      if (error.kind === "not-found") return;
+    const degrade = (error: FetchCommitsError, rowEls: HTMLElement[], hasToken: boolean): void => {
+      const action = decideDegrade(error, hasToken);
+      if (action.kind === "silent") return;
+      if (action.clearToken) void clearToken();
       const anchor = rowEls[0]?.getBoundingClientRect();
       if (anchor === undefined) return;
-      const text =
-        error.kind === "rate-limited"
-          ? `rate limit reached, resets in ${formatResetIn(error.resetAt, Date.now())}`
-          : "couldn't load the commit graph";
-      showNotice(text, anchor.top + window.scrollY, Math.max(0, anchor.left + window.scrollX));
+      showNotice(
+        action.text,
+        anchor.top + window.scrollY,
+        Math.max(0, anchor.left + window.scrollX),
+      );
     };
 
     const attach = async (gen: number): Promise<boolean> => {
@@ -210,18 +214,33 @@ export default defineContentScript({
       if (rowEls.length === 0) return false;
 
       const { owner, repo, ref } = parsed;
-      const cached = await getCacheEntry(owner, repo, ref);
+      const [cached, auth, settings] = await Promise.all([
+        getCacheEntry(owner, repo, ref),
+        getToken(),
+        getSettings(),
+      ]);
       if (gen !== generation) return true;
       if (cached !== null) render(rowEls, cached.commits, parsed);
       if (cached !== null && isFresh(cached)) return true;
 
-      const result = await fetchCommits(owner, repo, ref);
+      const result = await fetchCommits(
+        owner,
+        repo,
+        ref,
+        settings.commitDepth,
+        auth?.access_token,
+        cached?.etag,
+      );
       if (gen !== generation) return true;
       if (!result.ok) {
-        degrade(result.error, rowEls);
+        degrade(result.error, rowEls, auth !== null);
         return true;
       }
-      void setCacheEntry(owner, repo, ref, result.commits);
+      if ("notModified" in result) {
+        if (cached !== null) void setCacheEntry(owner, repo, ref, cached.commits, cached.etag);
+        return true;
+      }
+      void setCacheEntry(owner, repo, ref, result.commits, result.etag);
       render(rowEls, result.commits, parsed);
       return true;
     };

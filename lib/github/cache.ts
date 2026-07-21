@@ -70,10 +70,11 @@ export async function setCacheEntry(
   repo: string,
   ref: string | undefined,
   commits: Commit[],
+  etag?: string,
 ): Promise<void> {
   const key = cacheKey(owner, repo, ref);
   const now = Date.now();
-  const entry: CacheEntry = { commits, fetchedAt: now, lastAccessed: now };
+  const entry: CacheEntry = { commits, fetchedAt: now, lastAccessed: now, etag };
   try {
     await browser.storage.local.set({ [key]: entry });
     await evictExcess(MAX_CACHE_ENTRIES);
