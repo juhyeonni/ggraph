@@ -1,4 +1,5 @@
-import type { GraphLayout } from "../../types/graph";
+import type { GraphEdge, GraphLayout } from "../../types/graph";
+import type { RelationshipHighlight } from "../layout/relationship";
 
 const LANE_WIDTH = 12;
 const NODE_RADIUS = 3.5;
@@ -6,6 +7,7 @@ const EDGE_WIDTH = 2;
 const DANGLING_STUB = 16;
 const CLIP_BUFFER = 40;
 const EDGE_CURVE = 10;
+const FADE_ALPHA = 0.35;
 
 export type Theme = "light" | "dark";
 
@@ -14,11 +16,27 @@ const LANE_COLORS: Record<Theme, string[]> = {
   dark: ["#1f6feb", "#3fb950", "#db6d28", "#a371f7", "#f778ba", "#d29922"],
 };
 
+// Derived once at module load (not per-draw-call string parsing) so the fade
+// path adds no extra work to the existing hot loop below.
+function withAlpha(hex: string, alpha: number): string {
+  const n = Number.parseInt(hex.slice(1), 16);
+  const r = (n >> 16) & 255;
+  const g = (n >> 8) & 255;
+  const b = n & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+const FADED_LANE_COLORS: Record<Theme, string[]> = {
+  light: LANE_COLORS.light.map((c) => withAlpha(c, FADE_ALPHA)),
+  dark: LANE_COLORS.dark.map((c) => withAlpha(c, FADE_ALPHA)),
+};
+
 export interface DrawOptions {
   theme: Theme;
   visibleTop: number;
   visibleBottom: number;
   highlightRow?: number;
+  highlight?: RelationshipHighlight;
 }
 
 export function laneX(lane: number): number {
@@ -103,6 +121,12 @@ export function drawGraph(
   ctx.clearRect(0, top, width, bottom - top);
   ctx.lineWidth = EDGE_WIDTH;
   const colors = LANE_COLORS[options.theme];
+  const fadedColors = FADED_LANE_COLORS[options.theme];
+  const highlight = options.highlight;
+  const isEdgeHighlighted = (edge: GraphEdge): boolean =>
+    highlight === undefined || highlight.edges.has(edge);
+  const isRowHighlighted = (row: number): boolean =>
+    highlight === undefined || highlight.rows.has(row);
 
   // ponytail: linear scan over all edges/rows per draw is fine at the 200-commit
   // default depth; index rows by y if depth ever grows into the thousands.
@@ -114,6 +138,7 @@ export function drawGraph(
     if (Math.max(y1, y2) < top || Math.min(y1, y2) > bottom) continue;
     const landLane =
       edge.toRow === null ? edge.toLane : (layout.rows[edge.toRow]?.lane ?? edge.toLane);
+    const palette = isEdgeHighlighted(edge) ? colors : fadedColors;
     drawEdge(
       ctx,
       laneX(edge.fromLane),
@@ -121,7 +146,7 @@ export function drawGraph(
       laneX(edge.toLane),
       laneX(landLane),
       y2,
-      laneColor(colors, landLane),
+      laneColor(palette, landLane),
     );
   }
 
@@ -130,7 +155,8 @@ export function drawGraph(
     const y = rowCenters[i];
     if (row === undefined || y === undefined) continue;
     if (y < top || y > bottom) continue;
-    const color = laneColor(colors, row.lane);
+    const palette = isRowHighlighted(i) ? colors : fadedColors;
+    const color = laneColor(palette, row.lane);
     ctx.fillStyle = color;
     ctx.beginPath();
     ctx.arc(laneX(row.lane), y, NODE_RADIUS, 0, Math.PI * 2);

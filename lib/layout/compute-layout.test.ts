@@ -64,6 +64,13 @@ describe("computeLayout", () => {
     expect(mergeIn).toBeDefined();
     expect(mergeIn?.toLane).toBe(1);
     expect(layout.rows[2]?.lane).toBe(0);
+
+    // "a" is m's parents[0]: only the m->a edge is first-parent, the m->f
+    // edge (m's second parent) is not.
+    const mFirst = layout.edges.find((e) => e.fromRow === 0 && e.isFirstParent);
+    expect(mFirst?.toRow).toBe(2);
+    const mSecond = layout.edges.find((e) => e.fromRow === 0 && !e.isFirstParent);
+    expect(mSecond?.toRow).toBe(1);
   });
 
   it("handles a diamond where two children await the same parent", () => {
@@ -96,6 +103,10 @@ describe("computeLayout", () => {
     expect(fromMerge.map((e) => e.toRow).sort()).toEqual([1, 2, 3]);
     expect(layout.laneCount).toBe(3);
     expect(actualTopology(layout)).toEqual(edgeTopology(commits));
+
+    // Exactly one outgoing edge per row is first-parent: parents[0] ("a").
+    expect(fromMerge.filter((e) => e.isFirstParent)).toHaveLength(1);
+    expect(fromMerge.find((e) => e.isFirstParent)?.toRow).toBe(1);
   });
 
   it("marks parents outside the fetched window as dangling", () => {

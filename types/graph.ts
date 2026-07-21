@@ -12,6 +12,7 @@ export interface GraphEdge {
   fromLane: number;
   toRow: number | null;
   toLane: number;
+  isFirstParent: boolean;
 }
 
 export interface GraphLayout {

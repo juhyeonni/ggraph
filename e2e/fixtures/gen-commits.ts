@@ -21,16 +21,23 @@ function shaFor(index: number): string {
 // Deterministic (no randomness) so heap-budget samples are reproducible:
 // a linear chain with a merge commit (second parent further back) every 7th
 // commit, mirroring a real repo's mostly-linear-with-occasional-merges shape.
+// A merge commit's own message uses GitHub's generated PR-merge format (see
+// lib/github/merge-message.ts) so the relationship-badge tooltip's
+// branch/PR line (bolt 012) is exercised end-to-end, not just the
+// no-match fallback.
 export function genFixtureCommits(count: number): FixtureCommit[] {
   const commits: FixtureCommit[] = [];
   for (let i = 0; i < count; i++) {
     const parents: string[] = [];
     if (i + 1 < count) parents.push(shaFor(i + 1));
-    if (i % 7 === 0 && i + 10 < count) parents.push(shaFor(i + 10));
+    const isMerge = i % 7 === 0 && i + 10 < count;
+    if (isMerge) parents.push(shaFor(i + 10));
     commits.push({
       sha: shaFor(i),
       parents,
-      message: `Fixture commit ${i}`,
+      message: isMerge
+        ? `Merge pull request #${100 + i} from acme/feature-${i}`
+        : `Fixture commit ${i}`,
       authorName: "Fixture Author",
       date: new Date(BASE_DATE_MS - i * 60_000).toISOString(),
     });

@@ -76,8 +76,10 @@ test.describe
       ).toBeVisible({ timeout: 5_000 });
     });
 
-    test("004: hover shows the tooltip, click navigates to the commit", async () => {
+    test("004: hovering a merge node shows the relationship badge, click navigates to the commit", async () => {
       // Reuses story 003's already-rendered page/session — no re-navigation.
+      // Row 0 of genFixtureCommits is always a merge commit (2 parents) with
+      // a parseable GitHub PR-merge message (see e2e/fixtures/gen-commits.ts).
       const canvasBox = await page.locator("#ggraph-rail").boundingBox();
       const rowBox = await page.locator('[data-testid="commit-row-item"]').first().boundingBox();
       if (canvasBox === null || rowBox === null) {
@@ -91,10 +93,15 @@ test.describe
       const tooltip = page.locator("#ggraph-tooltip");
       await expect(
         tooltip,
-        "expected #ggraph-tooltip to become visible on hovering the first commit node",
+        "expected #ggraph-tooltip (now a relationship badge, bolt 012) to become visible on " +
+          "hovering the first commit's merge node",
       ).toBeVisible({ timeout: 2_000 });
-      await expect(tooltip).toContainText("Fixture commit 0");
-      await expect(tooltip).toContainText("Fixture Author");
+      // Old metadata content (message/author/date/sha) is gone entirely (story 005);
+      // the badge shows parent count + the parsed merge-source branch/PR instead.
+      await expect(tooltip).toContainText("merge");
+      await expect(tooltip).toContainText("2 parents");
+      await expect(tooltip).toContainText("from acme/feature-0");
+      await expect(tooltip).toContainText("PR #100");
 
       await page.mouse.click(x, y);
       await page.waitForURL(/\/commit\//, { timeout: 5_000 });
@@ -168,5 +175,68 @@ test.describe
             `(recorded in e2e/results/heap-budget.json)`,
         ).toBeLessThanOrEqual(BUDGET_MB);
       }
+    });
+
+    test("006: hovering an ordinary commit shows no relationship badge (story 005)", async () => {
+      const NO_BADGE_REPO = "no-badge-repo";
+      const commits = genFixtureCommits(30);
+      await routeCommitsPage(page, NO_BADGE_REPO, commits);
+      await routeCommitsApi(page, NO_BADGE_REPO, commits);
+      await page.goto(`https://github.com/${FIXTURE_OWNER}/${NO_BADGE_REPO}/commits/main`);
+      await expect(page.locator("#ggraph-rail")).toBeVisible({ timeout: 5_000 });
+
+      const canvasBox = await page.locator("#ggraph-rail").boundingBox();
+      const mergeRowBox = await page
+        .locator('[data-testid="commit-row-item"]')
+        .nth(0)
+        .boundingBox();
+      const plainRowBox = await page
+        .locator('[data-testid="commit-row-item"]')
+        .nth(1)
+        .boundingBox();
+      if (canvasBox === null || mergeRowBox === null || plainRowBox === null) {
+        throw new Error("expected the rail canvas and both commit rows to be visible");
+      }
+      const laneX = canvasBox.x + 6;
+      const tooltip = page.locator("#ggraph-tooltip");
+
+      // Row 0 is a merge — hover it first to prove the tooltip element does
+      // get created/shown at all (a stronger check than "never appeared").
+      await page.mouse.move(laneX, mergeRowBox.y + mergeRowBox.height / 2);
+      await expect(tooltip).toBeVisible({ timeout: 2_000 });
+
+      // Row 1 is an ordinary single-parent/single-child commit (story 005 AC1):
+      // no tooltip at all, not merely hidden metadata.
+      await page.mouse.move(laneX, plainRowBox.y + plainRowBox.height / 2);
+      await expect(
+        tooltip,
+        "expected the relationship badge to hide on an ordinary (non-merge, non-branch-point) commit",
+      ).toBeHidden({ timeout: 2_000 });
+    });
+
+    test("007: hovering a GitHub commit row highlights the same relationship as its canvas node (story 003)", async () => {
+      const ROW_HOVER_REPO = "row-hover-repo";
+      const commits = genFixtureCommits(30);
+      await routeCommitsPage(page, ROW_HOVER_REPO, commits);
+      await routeCommitsApi(page, ROW_HOVER_REPO, commits);
+      await page.goto(`https://github.com/${FIXTURE_OWNER}/${ROW_HOVER_REPO}/commits/main`);
+      await expect(page.locator("#ggraph-rail")).toBeVisible({ timeout: 5_000 });
+
+      // Hover GitHub's own row element directly — not the canvas — for the
+      // same merge commit test 004 hovers via the canvas node.
+      const tooltip = page.locator("#ggraph-tooltip");
+      await page.locator('[data-testid="commit-row-item"]').first().hover();
+      await expect(
+        tooltip,
+        "expected row-hover to drive the same shared focus state as canvas-hover (story 003)",
+      ).toBeVisible({ timeout: 2_000 });
+      await expect(tooltip).toContainText("merge");
+      await expect(tooltip).toContainText("2 parents");
+      await expect(tooltip).toContainText("from acme/feature-0");
+      await expect(tooltip).toContainText("PR #100");
+
+      // Leaving the row (without entering the canvas) clears focus (story 003 AC3).
+      await page.mouse.move(0, 0);
+      await expect(tooltip).toBeHidden({ timeout: 2_000 });
     });
   });

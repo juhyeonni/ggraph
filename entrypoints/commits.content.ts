@@ -3,6 +3,7 @@ import { type HitNode, hitTest } from "../lib/draw/hit-test";
 import { getCacheEntry, isFresh, setCacheEntry } from "../lib/github/cache";
 import { decideDegrade } from "../lib/github/degrade";
 import { type Commit, type FetchCommitsError, fetchCommits } from "../lib/github/fetch-commits";
+import { parseMergeSource } from "../lib/github/merge-message";
 import {
   type CommitsPath,
   findCommitRowEls,
@@ -13,9 +14,10 @@ import {
 import { getSettings } from "../lib/github/settings-store";
 import { clearToken, getToken } from "../lib/github/token-store";
 import { computeLayout } from "../lib/layout/compute-layout";
+import { classifyRow, computeRelationshipHighlight } from "../lib/layout/relationship";
 import { log } from "../lib/log";
 import { removeNotice, showNotice } from "../lib/ui/notice";
-import { hideTooltip, removeTooltip, showTooltip } from "../lib/ui/tooltip";
+import { buildRelationshipBadge, hideTooltip, removeTooltip, showTooltip } from "../lib/ui/tooltip";
 
 const RAIL_ID = "ggraph-rail";
 const MIN_VIEWPORT_WIDTH = 768;
@@ -104,17 +106,72 @@ export default defineContentScript({
         nodes.push({ x: laneX(row.lane), y: center, data: { commit, row: idx } });
       }
 
-      let highlight: number | undefined;
+      let focusedRow: number | undefined;
+      let clearRafId = 0;
+
       const draw = (): void => {
         const visibleTop = window.scrollY - top;
         drawGraph(canvas, layout, rowCenters, {
           theme: getPageTheme(),
           visibleTop,
           visibleBottom: visibleTop + window.innerHeight,
-          highlightRow: highlight,
+          highlightRow: focusedRow,
+          highlight:
+            focusedRow === undefined ? undefined : computeRelationshipHighlight(layout, focusedRow),
         });
       };
       draw();
+
+      // Only merge/branch-point rows (story 005) get a tooltip; ordinary
+      // commits hide it, fully replacing the old always-on metadata tooltip.
+      const updateBadge = (row: number | undefined, clientX: number, clientY: number): void => {
+        if (row === undefined) {
+          hideTooltip();
+          return;
+        }
+        const classification = classifyRow(layout, row);
+        if (!classification.isMerge && !classification.isBranchPoint) {
+          hideTooltip();
+          return;
+        }
+        const commit = deduped[row];
+        if (commit === undefined) {
+          hideTooltip();
+          return;
+        }
+        const mergeSource = classification.isMerge ? parseMergeSource(commit.message) : null;
+        showTooltip(buildRelationshipBadge(classification, mergeSource), clientX, clientY);
+      };
+
+      // Single shared focus source for both hover surfaces (story 003): set
+      // cancels any pending hand-off clear (below) so moving directly from a
+      // row to its own canvas node — or vice versa — never flashes full color
+      // in between; redraw only fires on an actual row change.
+      const focus = (row: number | undefined, clientX: number, clientY: number): void => {
+        if (clearRafId !== 0) {
+          cancelAnimationFrame(clearRafId);
+          clearRafId = 0;
+        }
+        if (row !== focusedRow) {
+          focusedRow = row;
+          draw();
+        }
+        updateBadge(row, clientX, clientY);
+      };
+
+      // Leaving a surface defers the clear by one animation frame: the DOM
+      // doesn't guarantee mouseleave-then-mouseenter ordering across two
+      // different elements, so only clear if nothing re-focused first.
+      const scheduleClear = (): void => {
+        if (clearRafId !== 0) cancelAnimationFrame(clearRafId);
+        clearRafId = requestAnimationFrame(() => {
+          clearRafId = 0;
+          if (focusedRow === undefined) return;
+          focusedRow = undefined;
+          draw();
+          hideTooltip();
+        });
+      };
 
       const localPoint = (event: MouseEvent): { x: number; y: number } => {
         const rect = canvas.getBoundingClientRect();
@@ -124,35 +181,12 @@ export default defineContentScript({
       const onMove = safe((event: MouseEvent): void => {
         const { x, y } = localPoint(event);
         const hit = hitTest(nodes, x, y, HIT_RADIUS);
-        if (hit?.row !== highlight) {
-          highlight = hit?.row;
-          draw();
-        }
-        if (hit === null) {
-          hideTooltip();
-          canvas.style.cursor = "default";
-          return;
-        }
-        const { commit } = hit;
-        showTooltip(
-          {
-            message: commit.message,
-            authorName: commit.authorName,
-            date: commit.date,
-            sha: commit.sha.slice(0, 7),
-          },
-          event.clientX,
-          event.clientY,
-        );
-        canvas.style.cursor = "pointer";
+        focus(hit?.row, event.clientX, event.clientY);
+        canvas.style.cursor = hit === null ? "default" : "pointer";
       });
 
       const onLeave = safe((): void => {
-        if (highlight !== undefined) {
-          highlight = undefined;
-          draw();
-        }
-        hideTooltip();
+        scheduleClear();
       });
 
       const onClick = safe((event: MouseEvent): void => {
@@ -167,6 +201,28 @@ export default defineContentScript({
           window.location.assign(url);
         }
       });
+
+      // Second hover source (story 003): GitHub's own commit rows drive the
+      // same shared focus as canvas nodes. A row with no indexBySha match
+      // (GitHub DOM drift) is silently skipped — canvas-only focus remains.
+      const rowCleanups: Array<() => void> = [];
+      for (const el of rowEls) {
+        const sha = getRowSha(el);
+        const idx = sha === null ? undefined : indexBySha.get(sha);
+        if (idx === undefined) continue;
+        const onRowEnter = safe((event: MouseEvent): void => {
+          focus(idx, event.clientX, event.clientY);
+        });
+        const onRowLeave = safe((): void => {
+          scheduleClear();
+        });
+        el.addEventListener("mouseenter", onRowEnter);
+        el.addEventListener("mouseleave", onRowLeave);
+        rowCleanups.push(() => {
+          el.removeEventListener("mouseenter", onRowEnter);
+          el.removeEventListener("mouseleave", onRowLeave);
+        });
+      }
 
       let rafId = 0;
       const onScroll = safe((): void => {
@@ -185,10 +241,12 @@ export default defineContentScript({
       cleanupDraw = (): void => {
         window.removeEventListener("scroll", onScroll);
         if (rafId !== 0) cancelAnimationFrame(rafId);
+        if (clearRafId !== 0) cancelAnimationFrame(clearRafId);
         canvas.removeEventListener("mousemove", onMove);
         canvas.removeEventListener("mouseleave", onLeave);
         canvas.removeEventListener("click", onClick);
         canvas.removeEventListener("auxclick", onClick);
+        for (const cleanup of rowCleanups) cleanup();
         hideTooltip();
       };
     };

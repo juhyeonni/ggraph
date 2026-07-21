@@ -1,16 +1,17 @@
+import type { MergeSource } from "../github/merge-message";
+import type { RowClassification } from "../layout/relationship";
+
 const TOOLTIP_ID = "ggraph-tooltip";
 const EDGE_PAD = 12;
 
-export interface TooltipContent {
-  message: string;
-  authorName: string;
-  date: string;
-  sha: string;
+export interface RelationshipBadge {
+  parentCount: number;
+  childCount: number;
+  mergeSource: MergeSource | null;
+  marker: "merge-point" | "branch-point";
 }
 
 let tooltipEl: HTMLElement | null = null;
-let titleEl: HTMLElement | null = null;
-let metaEl: HTMLElement | null = null;
 
 function ensureTooltip(): HTMLElement {
   if (tooltipEl !== null && document.body.contains(tooltipEl)) return tooltipEl;
@@ -20,29 +21,41 @@ function ensureTooltip(): HTMLElement {
     "position:fixed;z-index:2147483647;max-width:320px;pointer-events:none;" +
     "padding:6px 8px;border-radius:6px;font-size:12px;line-height:1.4;" +
     "background:#1f2328;color:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.4);display:none;";
-  const title = document.createElement("div");
-  title.style.fontWeight = "600";
-  const meta = document.createElement("div");
-  meta.style.opacity = "0.8";
-  el.append(title, meta);
   document.body.appendChild(el);
   tooltipEl = el;
-  titleEl = title;
-  metaEl = meta;
   return el;
 }
 
-function shortDate(iso: string): string {
-  const parsed = new Date(iso);
-  return Number.isNaN(parsed.getTime()) ? iso : parsed.toLocaleDateString();
+// Marker precedence mirrors lib/layout/relationship.ts's classifyRow: a row
+// that is both a merge and a branch point reads primarily as a merge point.
+// mergeSource is only ever carried through for a merge row, even if a caller
+// passed one in for a non-merge classification (defensive).
+export function buildRelationshipBadge(
+  classification: RowClassification,
+  mergeSource: MergeSource | null,
+): RelationshipBadge {
+  return {
+    parentCount: classification.parentCount,
+    childCount: classification.childCount,
+    mergeSource: classification.isMerge ? mergeSource : null,
+    marker: classification.isMerge ? "merge-point" : "branch-point",
+  };
 }
 
-export function showTooltip(content: TooltipContent, clientX: number, clientY: number): void {
-  const el = ensureTooltip();
-  if (titleEl !== null) titleEl.textContent = content.message;
-  if (metaEl !== null) {
-    metaEl.textContent = `${content.authorName} · ${shortDate(content.date)} · ${content.sha}`;
+export function formatRelationshipBadge(badge: RelationshipBadge): string {
+  if (badge.marker === "branch-point") return `branch point · ${badge.childCount} children`;
+  const parts = [`${badge.parentCount} parents`];
+  if (badge.mergeSource !== null) {
+    parts.push(`from ${badge.mergeSource.branch}`);
+    if (badge.mergeSource.prNumber !== null) parts.push(`PR #${badge.mergeSource.prNumber}`);
   }
+  if (badge.childCount > 1) parts.push(`${badge.childCount} children`);
+  return `merge · ${parts.join(" · ")}`;
+}
+
+export function showTooltip(badge: RelationshipBadge, clientX: number, clientY: number): void {
+  const el = ensureTooltip();
+  el.textContent = formatRelationshipBadge(badge);
   el.style.display = "block";
   const rect = el.getBoundingClientRect();
   let left = clientX + EDGE_PAD;
@@ -60,6 +73,4 @@ export function hideTooltip(): void {
 export function removeTooltip(): void {
   tooltipEl?.remove();
   tooltipEl = null;
-  titleEl = null;
-  metaEl = null;
 }
