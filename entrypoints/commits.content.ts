@@ -124,7 +124,7 @@ export default defineContentScript({
 
       // Only merge/branch-point rows (story 005) get a tooltip; ordinary
       // commits hide it, fully replacing the old always-on metadata tooltip.
-      const updateBadge = (row: number | undefined, clientX: number, clientY: number): void => {
+      const updateBadge = (row: number | undefined): void => {
         if (row === undefined) {
           hideTooltip();
           return;
@@ -135,19 +135,26 @@ export default defineContentScript({
           return;
         }
         const commit = deduped[row];
-        if (commit === undefined) {
+        const graphRow = layout.rows[row];
+        const center = rowCenters[row];
+        if (commit === undefined || graphRow === undefined || center === undefined) {
           hideTooltip();
           return;
         }
         const mergeSource = classification.isMerge ? parseMergeSource(commit.message) : null;
-        showTooltip(buildRelationshipBadge(classification, mergeSource), clientX, clientY);
+        // Anchor the badge to the graph node itself (in the rail gutter), not the
+        // pointer, so it never covers the commit-list row text to its right.
+        const canvasRect = canvas.getBoundingClientRect();
+        const nodeX = canvasRect.left + laneX(graphRow.lane);
+        const nodeY = canvasRect.top + center;
+        showTooltip(buildRelationshipBadge(classification, mergeSource), nodeX, nodeY);
       };
 
       // Single shared focus source for both hover surfaces (story 003): set
       // cancels any pending hand-off clear (below) so moving directly from a
       // row to its own canvas node — or vice versa — never flashes full color
       // in between; redraw only fires on an actual row change.
-      const focus = (row: number | undefined, clientX: number, clientY: number): void => {
+      const focus = (row: number | undefined): void => {
         if (clearRafId !== 0) {
           cancelAnimationFrame(clearRafId);
           clearRafId = 0;
@@ -156,7 +163,7 @@ export default defineContentScript({
           focusedRow = row;
           draw();
         }
-        updateBadge(row, clientX, clientY);
+        updateBadge(row);
       };
 
       // Leaving a surface defers the clear by one animation frame: the DOM
@@ -181,7 +188,7 @@ export default defineContentScript({
       const onMove = safe((event: MouseEvent): void => {
         const { x, y } = localPoint(event);
         const hit = hitTest(nodes, x, y, HIT_RADIUS);
-        focus(hit?.row, event.clientX, event.clientY);
+        focus(hit?.row);
         canvas.style.cursor = hit === null ? "default" : "pointer";
       });
 
@@ -210,8 +217,8 @@ export default defineContentScript({
         const sha = getRowSha(el);
         const idx = sha === null ? undefined : indexBySha.get(sha);
         if (idx === undefined) continue;
-        const onRowEnter = safe((event: MouseEvent): void => {
-          focus(idx, event.clientX, event.clientY);
+        const onRowEnter = safe((): void => {
+          focus(idx);
         });
         const onRowLeave = safe((): void => {
           scheduleClear();
@@ -264,8 +271,13 @@ export default defineContentScript({
       );
     };
 
-    const attach = async (gen: number): Promise<boolean> => {
-      const parsed = parseCommitsPath(location.pathname);
+    const attach = async (gen: number, targetPath: string): Promise<boolean> => {
+      // targetPath, not location.pathname: WXT fires wxt:locationchange from the
+      // Navigation API `navigate` event, which runs BEFORE the navigation
+      // commits — location.pathname is still the old /commits URL then (and
+      // GitHub keeps the old commit rows in the DOM for seconds), so reading it
+      // here would re-render the rail onto the page we're leaving.
+      const parsed = parseCommitsPath(targetPath);
       if (parsed === null || parsed.filePath !== undefined) return true;
       if (window.innerWidth < MIN_VIEWPORT_WIDTH) return true;
       const rowEls = findCommitRowEls();
@@ -303,24 +315,24 @@ export default defineContentScript({
       return true;
     };
 
-    const sync = async (gen: number): Promise<void> => {
+    const sync = async (gen: number, targetPath: string): Promise<void> => {
       try {
         detachRail();
-        if (await attach(gen)) return;
+        if (await attach(gen, targetPath)) return;
         if (gen !== generation || retries >= MAX_RETRIES) return;
         retries += 1;
         ctx.setTimeout(() => {
-          void sync(gen);
+          void sync(gen, targetPath);
         }, RETRY_INTERVAL_MS);
       } catch (error) {
         log.error("sync failed", error);
       }
     };
 
-    const start = (): void => {
+    const start = (targetPath: string = location.pathname): void => {
       generation += 1;
       retries = 0;
-      void sync(generation);
+      void sync(generation, targetPath);
     };
 
     let resizeTimer: number | undefined;
@@ -330,7 +342,10 @@ export default defineContentScript({
     };
 
     start();
-    ctx.addEventListener(window, "wxt:locationchange", start);
+    ctx.addEventListener(window, "wxt:locationchange", (event) => {
+      // Use the destination URL from the event; location.pathname is stale here.
+      start(event.newUrl.pathname);
+    });
     ctx.addEventListener(window, "resize", onResize);
     ctx.onInvalidated(() => {
       detachRail();

@@ -53,17 +53,28 @@ export function formatRelationshipBadge(badge: RelationshipBadge): string {
   return `merge · ${parts.join(" · ")}`;
 }
 
-export function showTooltip(badge: RelationshipBadge, clientX: number, clientY: number): void {
+// nodeX/nodeY is the graph node's screen position (in the rail gutter). The
+// badge opens to the LEFT of the node so it never covers the commit-list row
+// text, which sits to the right of the rail. If the left gutter is too narrow,
+// it falls back to sitting just above the node instead.
+export function showTooltip(badge: RelationshipBadge, nodeX: number, nodeY: number): void {
   const el = ensureTooltip();
   el.textContent = formatRelationshipBadge(badge);
   el.style.display = "block";
   const rect = el.getBoundingClientRect();
-  let left = clientX + EDGE_PAD;
-  if (left + rect.width > window.innerWidth) left = clientX - EDGE_PAD - rect.width;
-  let top = clientY + EDGE_PAD;
-  if (top + rect.height > window.innerHeight) top = clientY - EDGE_PAD - rect.height;
-  el.style.left = `${Math.max(0, left)}px`;
-  el.style.top = `${Math.max(0, top)}px`;
+
+  let left = nodeX - EDGE_PAD - rect.width;
+  let top = nodeY - rect.height / 2;
+  if (left < EDGE_PAD) {
+    // Not enough room on the left: place it above the node (flip below near the top edge).
+    left = nodeX;
+    top = nodeY - EDGE_PAD - rect.height;
+    if (top < EDGE_PAD) top = nodeY + EDGE_PAD;
+  }
+  left = Math.max(EDGE_PAD, Math.min(left, window.innerWidth - rect.width - EDGE_PAD));
+  top = Math.max(EDGE_PAD, Math.min(top, window.innerHeight - rect.height - EDGE_PAD));
+  el.style.left = `${left}px`;
+  el.style.top = `${top}px`;
 }
 
 export function hideTooltip(): void {

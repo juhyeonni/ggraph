@@ -239,4 +239,24 @@ test.describe
       await page.mouse.move(0, 0);
       await expect(tooltip).toBeHidden({ timeout: 2_000 });
     });
+
+    test("008: rail is removed after SPA-navigating away from the commits page (#21)", async () => {
+      const NAV_REPO = "nav-repo";
+      const commits = genFixtureCommits(20);
+      await routeCommitsPage(page, NAV_REPO, commits);
+      await routeCommitsApi(page, NAV_REPO, commits);
+      await page.goto(`https://github.com/${FIXTURE_OWNER}/${NAV_REPO}/commits/main`);
+      await expect(page.locator("#ggraph-rail")).toBeVisible({ timeout: 5_000 });
+
+      // Same-document (client-side) navigation to a non-commits page, as GitHub
+      // does. The content script must detach the rail so it never lingers on the
+      // destination page (issue #21).
+      await page.evaluate((owner) => {
+        history.pushState({}, "", `/${owner}/nav-repo`);
+      }, FIXTURE_OWNER);
+      await expect(
+        page.locator("#ggraph-rail"),
+        "the rail must be removed once the URL is no longer a commits page (#21)",
+      ).toHaveCount(0, { timeout: 3_000 });
+    });
   });
