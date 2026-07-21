@@ -1,9 +1,9 @@
 ---
 intent: 001-commit-graph-on-commits-page
 phase: inception
-status: inception-complete
-created: 2026-07-21T01:00:51Z
-updated: 2026-07-21T02:05:00Z
+status: complete
+created: '2026-07-21T01:00:51Z'
+updated: '2026-07-21T02:05:00Z'
 ---
 
 # Requirements: Commit Graph on Commits Page

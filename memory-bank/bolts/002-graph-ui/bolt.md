@@ -3,23 +3,29 @@ id: 002-graph-ui
 unit: 001-graph-ui
 intent: 001-commit-graph-on-commits-page
 type: simple-construction-bolt
-status: planned
+status: complete
 stories:
   - 003-fetch-commits
   - 004-response-cache
   - 005-layout-core
   - 006-canvas-render
-created: 2026-07-21T01:50:00Z
-started: null
-completed: null
+created: '2026-07-21T01:50:00Z'
+started: '2026-07-21T02:10:30Z'
+completed: '2026-07-21T02:51:49Z'
 current_stage: null
-stages_completed: []
-
-requires_bolts: [001-graph-ui]
-enables_bolts: [003-graph-ui]
+stages_completed:
+  - name: plan
+    completed: '2026-07-21T02:22:36Z'
+    artifact: implementation-plan.md
+  - name: implement
+    completed: '2026-07-21T02:30:52Z'
+    artifact: implementation-walkthrough.md
+requires_bolts:
+  - 001-graph-ui
+enables_bolts:
+  - 003-graph-ui
 requires_units: []
 blocks: true
-
 complexity:
   avg_complexity: 2
   avg_uncertainty: 2

@@ -1,0 +1,32 @@
+{
+  "name": "ggraph",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wxt",
+    "build": "wxt build",
+    "postinstall": "wxt prepare",
+    "test": "vitest run --passWithNoTests",
+    "bench": "node benchmarks/layout-bench.mjs",
+    "lint": "biome check .",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "preact": "^10.29.7"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.4",
+    "fs-extra": "^11.3.6",
+    "happy-dom": "^20.11.0",
+    "js-yaml": "^5.2.1",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10",
+    "wxt": "^0.20.27"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  }
+}

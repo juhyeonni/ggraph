@@ -4,9 +4,9 @@ intent: 001-commit-graph-on-commits-page
 unit_type: frontend
 default_bolt_type: simple-construction-bolt
 phase: inception
-status: draft
-created: 2026-07-21T01:45:00Z
-updated: 2026-07-21T01:45:00Z
+status: complete
+created: '2026-07-21T01:45:00Z'
+updated: '2026-07-21T01:45:00Z'
 ---
 
 # Unit Brief: graph-ui

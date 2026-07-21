@@ -2,11 +2,11 @@
 id: 008-load-more
 unit: 001-graph-ui
 intent: 001-commit-graph-on-commits-page
-status: draft
+status: complete
 priority: should
-created: 2026-07-21T01:45:00Z
+created: '2026-07-21T01:45:00Z'
 assigned_bolt: 003-graph-ui
-implemented: false
+implemented: true
 ---
 
 # Story: 008-load-more

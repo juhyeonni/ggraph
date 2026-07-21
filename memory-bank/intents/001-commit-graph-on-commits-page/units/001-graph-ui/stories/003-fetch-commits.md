@@ -2,11 +2,11 @@
 id: 003-fetch-commits
 unit: 001-graph-ui
 intent: 001-commit-graph-on-commits-page
-status: draft
+status: complete
 priority: must
-created: 2026-07-21T01:45:00Z
+created: '2026-07-21T01:45:00Z'
 assigned_bolt: 002-graph-ui
-implemented: false
+implemented: true
 ---
 
 # Story: 003-fetch-commits
