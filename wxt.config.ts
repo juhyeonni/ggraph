@@ -5,9 +5,7 @@ export default defineConfig({
     esbuild: { jsx: "automatic", jsxImportSource: "preact" },
   }),
   manifest: {
-    name: "ggraph",
-    description: "Commit graph on GitHub's commits page",
-    version: "1.0.0",
+    // name, description, and version are derived from package.json by WXT.
     permissions: ["storage"],
     host_permissions: ["https://github.com/*", "https://api.github.com/*"],
     action: {
