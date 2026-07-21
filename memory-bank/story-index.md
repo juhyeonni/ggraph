@@ -1,8 +1,8 @@
 # Global Story Index
 
 ## Overview
-- **Total stories**: 28
-- **Generated**: 28
+- **Total stories**: 33
+- **Generated**: 33
 - **Last updated**: 2026-07-21
 
 ---
@@ -46,11 +46,19 @@
 - [x] **009-readme-user-docs** (001-release): README: install, usage, sign-in, privacy, dev/build - Must - ✅ GENERATED
 - [x] **010-release-checklist** (001-release): Ordered checklist, maintainer-only steps flagged - Should - ✅ GENERATED
 
+### 004-graph-ux
+
+- [x] **001-relationship-reachability** (001-graph-ux): First-parent + merge reachable-set computation (pure) - Must - ✅ GENERATED
+- [x] **002-fade-highlight-render** (001-graph-ux): Fade/highlight rendering in draw.ts - Must - ✅ GENERATED
+- [x] **003-bidirectional-focus-wiring** (001-graph-ux): Canvas + GitHub row hover drive the same highlight - Must - ✅ GENERATED
+- [x] **004-merge-branch-parsing** (001-graph-ux): Merge-source-branch + PR# parsing (pure) - Must - ✅ GENERATED
+- [x] **005-relationship-badge-tooltip** (001-graph-ux): Relationship-badge tooltip replaces metadata tooltip - Must - ✅ GENERATED
+
 ---
 
 ## Stories by Status
 
 - **Planned**: 0
-- **Generated**: 28
+- **Generated**: 33
 - **In Progress**: 0
 - **Completed**: 0

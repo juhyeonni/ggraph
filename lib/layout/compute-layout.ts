@@ -59,7 +59,13 @@ export function computeLayout(commits: LayoutCommit[]): GraphLayout {
       } else {
         parentLane = findOrAllocLane(lanes, parentSha);
       }
-      const edge: GraphEdge = { fromRow: row, fromLane: lane, toRow: null, toLane: parentLane };
+      const edge: GraphEdge = {
+        fromRow: row,
+        fromLane: lane,
+        toRow: null,
+        toLane: parentLane,
+        isFirstParent: p === 0,
+      };
       edges.push(edge);
       const list = waiting.get(parentSha);
       if (list !== undefined) list.push(edge);
