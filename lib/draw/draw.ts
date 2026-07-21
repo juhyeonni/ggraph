@@ -128,6 +128,12 @@ export function drawGraph(
   const isRowHighlighted = (row: number): boolean =>
     highlight === undefined || highlight.rows.has(row);
 
+  // When a commit is focused, everything NEWER than it (rows above it, toward
+  // HEAD — i.e. a smaller index) is deactivated, so the focused commit and its
+  // history (older, below) stand out.
+  const focusRow = options.highlightRow;
+  const isNewerThanFocus = (row: number): boolean => focusRow !== undefined && row < focusRow;
+
   // ponytail: linear scan over all edges/rows per draw is fine at the 200-commit
   // default depth; index rows by y if depth ever grows into the thousands.
   for (const edge of layout.edges) {
@@ -138,7 +144,8 @@ export function drawGraph(
     if (Math.max(y1, y2) < top || Math.min(y1, y2) > bottom) continue;
     const landLane =
       edge.toRow === null ? edge.toLane : (layout.rows[edge.toRow]?.lane ?? edge.toLane);
-    const palette = isEdgeHighlighted(edge) ? colors : fadedColors;
+    const active = isEdgeHighlighted(edge) && !isNewerThanFocus(edge.fromRow);
+    const palette = active ? colors : fadedColors;
     drawEdge(
       ctx,
       laneX(edge.fromLane),
@@ -146,7 +153,10 @@ export function drawGraph(
       laneX(edge.toLane),
       laneX(landLane),
       y2,
-      laneColor(palette, landLane),
+      // Colour by the travel lane, not the landing lane: a branch keeps its own
+      // colour down to the merge-in curve instead of turning base-coloured where
+      // it rejoins the main line.
+      laneColor(palette, edge.toLane),
     );
   }
 
@@ -155,7 +165,7 @@ export function drawGraph(
     const y = rowCenters[i];
     if (row === undefined || y === undefined) continue;
     if (y < top || y > bottom) continue;
-    const palette = isRowHighlighted(i) ? colors : fadedColors;
+    const palette = isRowHighlighted(i) && !isNewerThanFocus(i) ? colors : fadedColors;
     const color = laneColor(palette, row.lane);
     ctx.fillStyle = color;
     ctx.beginPath();

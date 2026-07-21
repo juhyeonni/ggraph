@@ -33,52 +33,44 @@ export function computeRelationshipHighlight(
   layout: GraphLayout,
   focusedRow: number,
 ): RelationshipHighlight {
-  const rows = new Set<number>();
+  const rows = new Set<number>([focusedRow]);
   const edges = new Set<GraphEdge>();
-  // Separate from `rows`: gates re-processing so a row only shallow-marked
-  // as a merge's extra endpoint (below) can still be fully walked later if
-  // it's independently reached as a real chain/fan-out member.
-  const visited = new Set<number>();
 
-  const visit = (row: number): void => {
-    rows.add(row);
-    if (visited.has(row)) return;
-    visited.add(row);
-    if (!classifyRow(layout, row).isMerge) return;
-    for (const edge of layout.edges) {
-      if (edge.fromRow !== row) continue;
-      edges.add(edge);
-      // The first-parent edge's endpoint is handled by the chain walk below;
-      // only the extra (non-first-parent) parents' endpoints are highlighted
-      // here, and without recursing into them ("don't continue the walk").
-      if (!edge.isFirstParent && edge.toRow !== null) rows.add(edge.toRow);
-    }
-  };
+  // The FOCUSED commit's own direct parent edges — including a merge's extra
+  // (non-first-parent) parents, so focusing a merge lights up the branch it
+  // brought in. Only the focused commit gets this: other merges reached along
+  // the base line below must NOT light up their own other branches.
+  for (const edge of layout.edges) {
+    if (edge.fromRow !== focusedRow) continue;
+    edges.add(edge);
+    if (edge.toRow !== null) rows.add(edge.toRow);
+  }
 
-  visit(focusedRow);
-
-  // Toward ancestors: follow the single first-parent edge out of each row.
+  // Toward ancestors: follow the single first-parent edge out of each row (the
+  // base line), marking rows/edges but never expanding other merges' extra parents.
   let current = focusedRow;
   for (;;) {
     const edge = layout.edges.find((e) => e.fromRow === current && e.isFirstParent);
     if (edge === undefined) break;
     edges.add(edge);
     if (edge.toRow === null) break;
-    visit(edge.toRow);
+    rows.add(edge.toRow);
     current = edge.toRow;
   }
 
   // Toward descendants: fan out to every child whose first parent is this
   // row (a branch point has more than one), each continuing its own search.
   const queue: number[] = [focusedRow];
+  const seen = new Set<number>([focusedRow]);
   while (queue.length > 0) {
     const row = queue.shift();
     if (row === undefined) continue;
     for (const edge of layout.edges) {
       if (edge.toRow !== row || !edge.isFirstParent) continue;
       edges.add(edge);
-      if (visited.has(edge.fromRow)) continue;
-      visit(edge.fromRow);
+      if (seen.has(edge.fromRow)) continue;
+      seen.add(edge.fromRow);
+      rows.add(edge.fromRow);
       queue.push(edge.fromRow);
     }
   }

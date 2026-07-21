@@ -136,7 +136,7 @@ describe("computeRelationshipHighlight", () => {
     );
   });
 
-  it("crosses a merge on the first-parent chain without wandering into its extra parent's ancestry", () => {
+  it("crosses a merge on the first-parent chain without lighting up its other branch", () => {
     const commits: LayoutCommit[] = [
       { sha: "h", parents: ["m"] },
       { sha: "m", parents: ["main1", "side"] },
@@ -147,12 +147,14 @@ describe("computeRelationshipHighlight", () => {
     ];
     const layout = computeLayout(commits);
     const highlight = computeRelationshipHighlight(layout, 0);
-    // h -> m -> main1 -> root is the first-parent chain; m's extra parent
-    // "side" lights up as the merge's other edge, but "sideRoot" (side's own
-    // ancestry) must not — the walk does not continue past side.
-    expect(highlight.rows).toEqual(new Set([0, 1, 2, 3, 4]));
+    // h -> m -> main1 -> root is the first-parent chain (the base line). m is a
+    // merge on the chain but NOT the focused commit, so its extra parent "side"
+    // (the branch merged into m) must NOT light up — only the focused commit's
+    // own merge expands into its other branch.
+    expect(highlight.rows).toEqual(new Set([0, 1, 3, 4]));
+    expect(highlight.rows.has(2)).toBe(false);
     expect(highlight.rows.has(5)).toBe(false);
-    expect(highlight.edges.has(edgeBetween(layout.edges, 2, 5))).toBe(false);
+    expect(highlight.edges.has(edgeBetween(layout.edges, 1, 2))).toBe(false);
   });
 
   it("stops the ancestor walk at a dangling edge without crashing", () => {
