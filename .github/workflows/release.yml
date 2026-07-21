@@ -1,0 +1,34 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # wxt zip builds the MV3 output and packages it as ggraph-<version>-chrome.zip
+      - run: pnpm exec wxt zip
+      - name: Publish GitHub Release with the zip
+        uses: softprops/action-gh-release@v2
+        with:
+          files: .output/*.zip
+          generate_release_notes: true
+
+      # BACKLOG — Chrome Web Store deploy (deferred; see the CWS-deploy issue).
+      # Enable once a CWS developer account + API credentials exist. Add a step
+      # that uploads .output/*.zip to the store (e.g. mnao305/chrome-extension-upload),
+      # gated on repo secrets: CWS_EXTENSION_ID, CWS_CLIENT_ID, CWS_CLIENT_SECRET,
+      # CWS_REFRESH_TOKEN. Keep it a separate, secret-gated step so tag releases
+      # keep producing the zip even before store publishing is wired up.
